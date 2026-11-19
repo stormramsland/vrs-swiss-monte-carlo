@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cs2-vrs-swiss-monte-carlo"
+version = "0.1.0"
+description = "CS2 Valve Regional Standings tools: VRS rating updates, Swiss-stage Monte Carlo and Kelly bet sizing"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = []
+
+[project.scripts]
+cs2-vrs-swiss = "cs2_vrs_swiss.pipeline:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
