@@ -12,12 +12,12 @@ Inputs (data/):
     odds.csv         team,qualify,not_qualify
 
 Usage (from the project root):
-    cs2-vrs-swiss                                  # 50€ bankroll, 5€ max bet, half Kelly
-    cs2-vrs-swiss --bankroll 25
-    cs2-vrs-swiss --skip-sim                       # odds changed only: reuse the last simulation
-    cs2-vrs-swiss --fraction 1 --seed 1            # full Kelly, repeatable
-    cs2-vrs-swiss --bo3 all                        # every match best-of-three (e.g. a Stage 3)
-(`python -m cs2_vrs_swiss` does the same as `cs2-vrs-swiss`.)
+    vrs-swiss                                  # 50€ bankroll, 5€ max bet, half Kelly
+    vrs-swiss --bankroll 25
+    vrs-swiss --skip-sim                       # odds changed only: reuse the last simulation
+    vrs-swiss --fraction 1 --seed 1            # full Kelly, repeatable
+    vrs-swiss --bo3 all                        # every match best-of-three (e.g. a Stage 3)
+(`python -m vrs_swiss` does the same as `vrs-swiss`.)
 """
 
 from __future__ import annotations
@@ -72,7 +72,7 @@ def check_inputs(points_csv: str, round1_csv: str, odds_csv: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    ap = argparse.ArgumentParser(prog="cs2-vrs-swiss",
+    ap = argparse.ArgumentParser(prog="vrs-swiss",
                                  description="Simulate the Swiss stage and find value bets.")
     ap.add_argument("--bankroll", type=float, default=50.0, help="Bankroll in € (default 50)")
     ap.add_argument("--max-bet", type=float, default=5.0, help="Max stake per bet in € (default 5)")

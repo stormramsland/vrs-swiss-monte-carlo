@@ -10,12 +10,12 @@ Full Kelly is very aggressive when p is uncertain; a fraction of it (e.g. 0.25 =
 Kelly) is commonly used instead. Use --fraction for that.
 
 Single bet:
-    python -m cs2_vrs_swiss.kelly 0.853 1.25                      # p = 85.3%, decimal odds 1.25
-    python -m cs2_vrs_swiss.kelly 0.40 +150 --bankroll 1000       # American odds
-    python -m cs2_vrs_swiss.kelly 0.40 3/2 --fraction 0.25        # fractional odds, quarter Kelly
+    python -m vrs_swiss.kelly 0.853 1.25                      # p = 85.3%, decimal odds 1.25
+    python -m vrs_swiss.kelly 0.40 +150 --bankroll 1000       # American odds
+    python -m vrs_swiss.kelly 0.40 3/2 --fraction 0.25        # fractional odds, quarter Kelly
 
 Every team at once, using the qualification chances from montecarlo.py:
-    python -m cs2_vrs_swiss.kelly --results output/montecarlo_results.csv --odds data/odds.csv --bankroll 1000
+    python -m vrs_swiss.kelly --results output/montecarlo_results.csv --odds data/odds.csv --bankroll 1000
 odds.csv has columns team,qualify,not_qualify (odds in any format above; either can be
 empty). Both bets are checked for every team. Teams without odds are skipped.
 

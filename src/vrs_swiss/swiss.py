@@ -23,8 +23,8 @@ Which matches are best-of-three (--bo3):
 Every match is still one random draw; a BO3 match just uses the BO3 slope for the series.
 
 Command line (simulates the whole stage):
-    python -m cs2_vrs_swiss.swiss data/vrs_points.csv
-    python -m cs2_vrs_swiss.swiss data/vrs_points.csv --round1 data/round1.csv --seed 7
+    python -m vrs_swiss.swiss data/vrs_points.csv
+    python -m vrs_swiss.swiss data/vrs_points.csv --round1 data/round1.csv --seed 7
 round1.csv has two columns (team1,team2), one row per match. Without it,
 the hard-coded ROUND1 matchups below are used.
 """
