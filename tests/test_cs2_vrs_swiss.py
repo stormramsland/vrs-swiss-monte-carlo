@@ -1,16 +1,20 @@
+import argparse
 import io
 import os
 import random
 import tempfile
 import unittest
+import unittest.mock
+from collections import Counter
 from contextlib import redirect_stdout
 
 from cs2_vrs_swiss.bets import Bet, joint_kelly
 from cs2_vrs_swiss.kelly import kelly, to_decimal_odds
 from cs2_vrs_swiss.montecarlo import simulate
 from cs2_vrs_swiss.pipeline import check_inputs
-from cs2_vrs_swiss.swiss import SwissStage
-from cs2_vrs_swiss.vrs_match import age_weight, update_ratings
+from cs2_vrs_swiss.swiss import Calibration, SwissStage, add_calibration_args, calibration_from_args
+from cs2_vrs_swiss.vrs_match import (age_weight, calibrate, calibrated_win_probability,
+                                     expected_win_probability, update_ratings)
 
 TEAMS = {f"T{i}": 1600 - 25 * i for i in range(16)}
 ROUND1 = [(f"T{i}", f"T{i + 8}") for i in range(8)]
@@ -33,6 +37,92 @@ class TestVrsMatch(unittest.TestCase):
         self.assertEqual(age_weight(end, end), 1.0)               # last month: full weight
         self.assertEqual(age_weight(end - 181 * day, end), 0.0)   # older than 6 months
         self.assertAlmostEqual(age_weight(end - 105 * day, end), 0.5)
+
+
+class TestCalibration(unittest.TestCase):
+    def test_shrinks_towards_half(self):
+        self.assertAlmostEqual(calibrate(0.5), 0.5)
+        self.assertAlmostEqual(calibrate(0.9), 0.82)
+        self.assertAlmostEqual(calibrate(1.0), 0.9)
+        self.assertAlmostEqual(calibrate(0.9, 1.0), 0.9)     # slope 1 = raw model
+        self.assertAlmostEqual(calibrate(0.9, 0.0), 0.5)     # slope 0 = coin flip
+
+    def test_both_sides_sum_to_one(self):
+        for a, b in [(1750, 1320), (1500, 1500), (1400, 1600)]:
+            self.assertAlmostEqual(calibrated_win_probability(a, b) + calibrated_win_probability(b, a), 1)
+            self.assertLess(abs(calibrated_win_probability(a, b) - 0.5),
+                            abs(expected_win_probability(a, b) - 0.5) + 1e-12)
+
+    def test_invalid_slope(self):
+        with self.assertRaises(ValueError):
+            calibrate(0.7, 1.5)
+
+    def test_simulation_uses_it(self):
+        # big favourite vs big underdog: calibrated sims should produce more upsets
+        teams = {"Fav": 1900, "Dog": 1300}
+        def upsets(cal):
+            rng, n = random.Random(1), 0
+            for _ in range(4000):
+                s = SwissStage(teams, rng, update_points=False, calibration=cal)
+                s.set_round1([("Fav", "Dog")])
+                s.simulate_result(s.matches[0])
+                n += s.matches[0].winner == "Dog"
+            return n / 4000
+        raw = 1 - expected_win_probability(1900, 1300)
+        self.assertAlmostEqual(upsets(1.0), raw, delta=0.02)
+        self.assertAlmostEqual(upsets(0.8), 1 - calibrate(1 - raw), delta=0.02)
+
+
+class TestPerFormatCalibration(unittest.TestCase):
+    def play(self, calibration):
+        stage = SwissStage(TEAMS, random.Random(3), calibration=calibration)
+        stage.set_round1(ROUND1)
+        stage.simulate_to_end()
+        return stage
+
+    def test_deciders_are_bo3(self):
+        # Major Stage 1/2: advancement and elimination matches are BO3, the rest BO1
+        stage = self.play(Calibration())
+        for m in stage.matches:
+            w, l = map(int, m.group.split("-"))
+            self.assertEqual(m.best_of, 3 if 2 in (w, l) else 1, m.group)
+        counts = Counter(m.best_of for m in stage.matches)
+        self.assertEqual(counts, {1: 20, 3: 13})   # 0-0, 1-0, 0-1, 1-1 are BO1
+
+    def test_all_and_none(self):
+        self.assertTrue(all(m.best_of == 3 for m in self.play(Calibration(bo3_matches="all")).matches))
+        self.assertTrue(all(m.best_of == 1 for m in self.play(Calibration(bo3_matches="none")).matches))
+
+    def test_slope_follows_format(self):
+        teams = {"Fav": 1900, "Dog": 1300}
+        raw = expected_win_probability(1900, 1300)
+        for rule, expected in [("none", calibrate(raw, 0.3)), ("all", calibrate(raw, 0.9))]:
+            s = SwissStage(teams, random.Random(1), update_points=False,
+                           calibration=Calibration(bo1=0.3, bo3=0.9, bo3_matches=rule))
+            s.set_round1([("Fav", "Dog")])
+            self.assertAlmostEqual(s.simulate_result(s.matches[0]), expected)
+
+    def test_defaults_and_single_number(self):
+        self.assertEqual((Calibration().bo1, Calibration().bo3), (0.47, 0.61))
+        self.assertEqual(SwissStage(TEAMS, calibration=0.8).calibration, Calibration(0.8, 0.8))
+        self.assertEqual(SwissStage(TEAMS).calibration, Calibration())
+
+    def test_invalid(self):
+        with self.assertRaises(ValueError):
+            Calibration(bo1=1.5)
+        with self.assertRaises(ValueError):
+            Calibration(bo3_matches="some")
+
+    def test_command_line_options(self):
+        p = argparse.ArgumentParser()
+        add_calibration_args(p)
+        parse = lambda *a: calibration_from_args(p, p.parse_args(list(a)))
+        self.assertEqual(parse(), Calibration(0.47, 0.61, "deciders"))
+        self.assertEqual(parse("--calibration", "1"), Calibration(1, 1))          # overrides both
+        self.assertEqual(parse("--calibration-bo1", "0.5", "--bo3", "all"), Calibration(0.5, 0.61, "all"))
+        with self.assertRaises(SystemExit), redirect_stdout(io.StringIO()), \
+                unittest.mock.patch("sys.stderr", io.StringIO()):
+            parse("--calibration-bo3", "2")
 
 
 class TestSwiss(unittest.TestCase):
