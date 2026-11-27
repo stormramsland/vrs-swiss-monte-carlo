@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cs2-vrs-swiss-monte-carlo"
+name = "vrs-swiss-monte-carlo"
 version = "0.1.0"
 description = "CS2 Valve Regional Standings tools: VRS rating updates, Swiss-stage Monte Carlo and Kelly bet sizing"
 readme = "README.md"

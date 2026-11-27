@@ -1,4 +1,4 @@
-# cs2-vrs-swiss-monte-carlo
+# vrs-swiss-monte-carlo
 
 Tools built on CS2's Valve Regional Standings (VRS):
 
