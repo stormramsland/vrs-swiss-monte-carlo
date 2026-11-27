@@ -23,9 +23,9 @@ Inputs (all made by / for montecarlo.py):
    --fraction scales the result (0.5 = half Kelly). Stakes are rounded down to cents.
 
 Usage (from the project root):
-    python -m cs2_vrs_swiss.bets
-    python -m cs2_vrs_swiss.bets --bankroll 50 --max-bet 5 --fraction 0.5
-    python -m cs2_vrs_swiss.bets --odds data/odds.csv --runs output/montecarlo_runs.csv --results output/montecarlo_results.csv --save output/bets.csv
+    python -m vrs_swiss.bets
+    python -m vrs_swiss.bets --bankroll 50 --max-bet 5 --fraction 0.5
+    python -m vrs_swiss.bets --odds data/odds.csv --runs output/montecarlo_runs.csv --results output/montecarlo_results.csv --save output/bets.csv
 """
 
 from __future__ import annotations

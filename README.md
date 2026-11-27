@@ -60,13 +60,13 @@ output/               generated (not committed)
   montecarlo_results.csv
   montecarlo_runs.csv one row per run, 1 = qualified
   bets.csv            bets to place
-src/cs2_vrs_swiss/
+src/vrs_swiss/
   vrs_match.py        VRS rating update after a match
   swiss.py            Swiss stage rules and simulation
   montecarlo.py       Monte Carlo over the Swiss stage
   kelly.py            Kelly criterion, odds conversion
   bets.py             value bets + joint Kelly sizing
-  pipeline.py         everything in one command (cs2-vrs-swiss)
+  pipeline.py         everything in one command (vrs-swiss)
 tests/
 ```
 
@@ -77,13 +77,13 @@ Team names must be spelled the same in all three input files.
 Run from the project root.
 
 ```bash
-cs2-vrs-swiss                          # simulate + find bets (50€ bankroll, 5€ max bet, half Kelly)
-cs2-vrs-swiss --bankroll 25
-cs2-vrs-swiss --skip-sim               # only the odds changed: reuse the last simulation
-cs2-vrs-swiss --fraction 1 --seed 1    # full Kelly, repeatable
-cs2-vrs-swiss --bo3 all                # every match best-of-three
-cs2-vrs-swiss --calibration 0.8        # one slope for every match (Valve's evaluation)
-cs2-vrs-swiss --calibration 1          # raw VRS win chances (no calibration)
+vrs-swiss                          # simulate + find bets (50€ bankroll, 5€ max bet, half Kelly)
+vrs-swiss --bankroll 25
+vrs-swiss --skip-sim               # only the odds changed: reuse the last simulation
+vrs-swiss --fraction 1 --seed 1    # full Kelly, repeatable
+vrs-swiss --bo3 all                # every match best-of-three
+vrs-swiss --calibration 0.8        # one slope for every match (Valve's evaluation)
+vrs-swiss --calibration 1          # raw VRS win chances (no calibration)
 ```
 
 ### Calibration
@@ -117,11 +117,11 @@ updates are unaffected; they follow Valve's formula exactly.
 Individual tools:
 
 ```bash
-python -m cs2_vrs_swiss.vrs_match 1573 1414           # ratings after PVISION beats DENDELE
-python -m cs2_vrs_swiss.swiss data/vrs_points.csv     # play one stage, print every match
-python -m cs2_vrs_swiss.montecarlo data/vrs_points.csv data/round1.csv
-python -m cs2_vrs_swiss.kelly 0.6 2.10                # Kelly stake for one bet
-python -m cs2_vrs_swiss.bets --fraction 1             # full Kelly
+python -m vrs_swiss.vrs_match 1573 1414           # ratings after PVISION beats DENDELE
+python -m vrs_swiss.swiss data/vrs_points.csv     # play one stage, print every match
+python -m vrs_swiss.montecarlo data/vrs_points.csv data/round1.csv
+python -m vrs_swiss.kelly 0.6 2.10                # Kelly stake for one bet
+python -m vrs_swiss.bets --fraction 1             # full Kelly
 ```
 
 ## Tests
@@ -144,7 +144,7 @@ python -m unittest discover -s tests
 
 ## Credits and license
 
-The VRS rating update in `src/cs2_vrs_swiss/vrs_match.py` is a Python port of the Glicko
+The VRS rating update in `src/vrs_swiss/vrs_match.py` is a Python port of the Glicko
 step (`glicko.js`, `ranking_context.js`) from Valve's
 [counter-strike_regional_standings](https://github.com/ValveSoftware/counter-strike_regional_standings)
 repository, which Valve published for people to inspect and build on. That repository has

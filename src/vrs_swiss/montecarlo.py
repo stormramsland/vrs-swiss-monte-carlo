@@ -6,10 +6,10 @@ later rounds drawn by record with no rematches, and winners picked with VRS win 
 calibrated per series format (BO1 / BO3; see swiss.py).
 
 Usage:
-    python -m cs2_vrs_swiss.montecarlo data/vrs_points.csv data/round1.csv
-    python -m cs2_vrs_swiss.montecarlo data/vrs_points.csv data/round1.csv -n 10000 --seed 1
-    python -m cs2_vrs_swiss.montecarlo data/vrs_points.csv data/round1.csv --static-points --csv results.csv
-    python -m cs2_vrs_swiss.montecarlo data/vrs_points.csv data/round1.csv --bo3 all   # every match BO3
+    python -m vrs_swiss.montecarlo data/vrs_points.csv data/round1.csv
+    python -m vrs_swiss.montecarlo data/vrs_points.csv data/round1.csv -n 10000 --seed 1
+    python -m vrs_swiss.montecarlo data/vrs_points.csv data/round1.csv --static-points --csv results.csv
+    python -m vrs_swiss.montecarlo data/vrs_points.csv data/round1.csv --bo3 all   # every match BO3
 
 The results table is printed and saved as CSV (default: output/montecarlo_results.csv;
 change it with --csv).

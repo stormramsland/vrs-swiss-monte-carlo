@@ -8,12 +8,12 @@ import unittest.mock
 from collections import Counter
 from contextlib import redirect_stdout
 
-from cs2_vrs_swiss.bets import Bet, joint_kelly
-from cs2_vrs_swiss.kelly import kelly, to_decimal_odds
-from cs2_vrs_swiss.montecarlo import simulate
-from cs2_vrs_swiss.pipeline import check_inputs
-from cs2_vrs_swiss.swiss import Calibration, SwissStage, add_calibration_args, calibration_from_args
-from cs2_vrs_swiss.vrs_match import (age_weight, calibrate, calibrated_win_probability,
+from vrs_swiss.bets import Bet, joint_kelly
+from vrs_swiss.kelly import kelly, to_decimal_odds
+from vrs_swiss.montecarlo import simulate
+from vrs_swiss.pipeline import check_inputs
+from vrs_swiss.swiss import Calibration, SwissStage, add_calibration_args, calibration_from_args
+from vrs_swiss.vrs_match import (age_weight, calibrate, calibrated_win_probability,
                                      expected_win_probability, update_ratings)
 
 TEAMS = {f"T{i}": 1600 - 25 * i for i in range(16)}

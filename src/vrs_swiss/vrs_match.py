@@ -18,13 +18,13 @@ this tells you the head-to-head adjustment for one match, not the next published
 standings exactly.
 
 Usage as a library:
-    from cs2_vrs_swiss.vrs_match import update_ratings
+    from vrs_swiss.vrs_match import update_ratings
     new_winner, new_loser = update_ratings(1900.0, 1850.0)
 
 Usage from the command line:
-    python -m cs2_vrs_swiss.vrs_match 1900 1850
-    python -m cs2_vrs_swiss.vrs_match 1900 1850 --age-weight 0.8
-    python -m cs2_vrs_swiss.vrs_match 1900 1850 --match-date 2026-09-05 --window-end 2026-11-02
+    python -m vrs_swiss.vrs_match 1900 1850
+    python -m vrs_swiss.vrs_match 1900 1850 --age-weight 0.8
+    python -m vrs_swiss.vrs_match 1900 1850 --match-date 2026-09-05 --window-end 2026-11-02
 """
 
 from __future__ import annotations
