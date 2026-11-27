@@ -16,6 +16,7 @@ Usage (from the project root):
     cs2-vrs-swiss --bankroll 25
     cs2-vrs-swiss --skip-sim                       # odds changed only: reuse the last simulation
     cs2-vrs-swiss --fraction 1 --seed 1            # full Kelly, repeatable
+    cs2-vrs-swiss --bo3 all                        # every match best-of-three (e.g. a Stage 3)
 (`python -m cs2_vrs_swiss` does the same as `cs2-vrs-swiss`.)
 """
 
@@ -27,7 +28,7 @@ import os
 from .bets import report, save_bets
 from .kelly import load_odds, to_decimal_odds
 from .montecarlo import run as run_montecarlo
-from .swiss import load_pairs, load_points
+from .swiss import add_calibration_args, calibration_from_args, load_pairs, load_points
 
 
 def check_inputs(points_csv: str, round1_csv: str, odds_csv: str) -> None:
@@ -82,11 +83,13 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--skip-sim", action="store_true",
                     help="Reuse the last simulation in the output folder instead of simulating again")
     ap.add_argument("--quiet", action="store_true", help="Don't print the Monte Carlo table")
+    add_calibration_args(ap)
     ap.add_argument("--data-dir", default="data", help="Folder with the input CSVs (default: data)")
     ap.add_argument("--output-dir", default="output", help="Folder for generated CSVs (default: output)")
     args = ap.parse_args(argv)
     if not 0 < args.fraction <= 1:
         ap.error("--fraction must be in (0, 1]")
+    calibration = calibration_from_args(ap, args)
 
     points_csv = os.path.join(args.data_dir, "vrs_points.csv")
     round1_csv = os.path.join(args.data_dir, "round1.csv")
@@ -105,7 +108,8 @@ def main(argv: list[str] | None = None) -> None:
         print("Skipped; using the last simulation.\n")
     else:
         run_montecarlo(points_csv, round1_csv, args.sims, args.seed,
-                       results_csv=results_csv, runs_csv=runs_csv, show_table=not args.quiet)
+                       results_csv=results_csv, runs_csv=runs_csv, show_table=not args.quiet,
+                       calibration=calibration)
         print()
 
     print("## 2. Bets\n")

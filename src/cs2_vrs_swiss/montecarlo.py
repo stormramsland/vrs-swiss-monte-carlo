@@ -2,12 +2,14 @@
 Monte Carlo simulation of a Swiss stage: how often does each team qualify?
 
 Each simulation plays the whole stage with swiss.py: round 1 from the matchups file,
-later rounds drawn by record with no rematches, and winners picked with VRS win chances.
+later rounds drawn by record with no rematches, and winners picked with VRS win chances,
+calibrated per series format (BO1 / BO3; see swiss.py).
 
 Usage:
     python -m cs2_vrs_swiss.montecarlo data/vrs_points.csv data/round1.csv
     python -m cs2_vrs_swiss.montecarlo data/vrs_points.csv data/round1.csv -n 10000 --seed 1
     python -m cs2_vrs_swiss.montecarlo data/vrs_points.csv data/round1.csv --static-points --csv results.csv
+    python -m cs2_vrs_swiss.montecarlo data/vrs_points.csv data/round1.csv --bo3 all   # every match BO3
 
 The results table is printed and saved as CSV (default: output/montecarlo_results.csv;
 change it with --csv).
@@ -28,23 +30,34 @@ import os
 import random
 from collections import Counter
 
-from .swiss import LOSSES_TO_ELIMINATE, WINS_TO_ADVANCE, SwissStage, load_pairs, load_points
+from .swiss import (WINS_TO_ADVANCE, Calibration, SwissStage, add_calibration_args,
+                    calibration_from_args, load_pairs, load_points)
 
 RECORDS = [(3, 0), (3, 1), (3, 2), (2, 3), (1, 3), (0, 3)]
 
 
+def _as_calibration(calibration: Calibration | float | None) -> Calibration:
+    if calibration is None:
+        return Calibration()
+    return calibration if isinstance(calibration, Calibration) else Calibration.single(calibration)
+
+
 def simulate(points: dict[str, float], round1: list[tuple[str, str]], n: int,
-             seed: int | None = None, update_points: bool = True
+             seed: int | None = None, update_points: bool = True,
+             calibration: Calibration | float | None = None
              ) -> tuple[dict[str, Counter], dict[str, list[tuple[bool, float]]]]:
     """
     Run n stages. Returns ({team: Counter of final (wins, losses)},
                            {team: [(qualified, VRS points after the stage), ...] one per simulation}).
+    calibration: per-format slopes (default BO1 0.47 / BO3 0.61, BO3 for deciders),
+    or one number for every match.
     """
+    calibration = _as_calibration(calibration)
     rng = random.Random(seed)
     records = {t: Counter() for t in points}
     points_after: dict[str, list[tuple[bool, float]]] = {t: [] for t in points}
     for _ in range(n):
-        stage = SwissStage(points, rng, update_points=update_points)
+        stage = SwissStage(points, rng, update_points=update_points, calibration=calibration)
         stage.set_round1(round1)
         stage.simulate_to_end()
         for t in stage.teams.values():
@@ -63,14 +76,15 @@ def _percentile(sorted_xs: list[float], q: float) -> float:
 
 def run(points_csv: str, round1_csv: str, sims: int = 100000, seed: int | None = None,
         static_points: bool = False, results_csv: str | None = None, runs_csv: str | None = None,
-        show_table: bool = True) -> tuple[str, str]:
+        show_table: bool = True, calibration: Calibration | float | None = None) -> tuple[str, str]:
     """
     Simulate the stage, print the table and save both CSVs.
     Returns (results_csv path, runs_csv path). Default paths: output/ in the current folder.
     """
+    calibration = _as_calibration(calibration)
     points = load_points(points_csv)
     round1 = load_pairs(round1_csv)
-    records, points_after = simulate(points, round1, sims, seed, not static_points)
+    records, points_after = simulate(points, round1, sims, seed, not static_points, calibration)
     n = sims
 
     def pct(team: str, rec: tuple[int, int]) -> float:
@@ -95,7 +109,7 @@ def run(points_csv: str, round1_csv: str, sims: int = 100000, seed: int | None =
                     + [f"{pct(t, r):.1f}" for r in RECORDS])
 
     if show_table:
-        print(f"{n} simulations{' (static points)' if static_points else ''}")
+        print(f"{n} simulations ({calibration.describe()}{', static points' if static_points else ''})")
         if static_points:
             print("VRS after equals VRS before, since --static-points is on")
         else:
@@ -138,6 +152,7 @@ def main() -> None:
     p.add_argument("--seed", type=int, default=None, help="Random seed, for repeatable results")
     p.add_argument("--static-points", action="store_true",
                    help="Don't update VRS points between matches inside a simulation")
+    add_calibration_args(p)
     p.add_argument("--csv", default=None,
                    help="Where to save the results table as CSV "
                         "(default: output/montecarlo_results.csv)")
@@ -145,8 +160,9 @@ def main() -> None:
                    help="Where to save which teams qualified in each run "
                         "(default: output/montecarlo_runs.csv)")
     args = p.parse_args()
+    calibration = calibration_from_args(p, args)
     run(args.points_csv, args.round1_csv, args.sims, args.seed, args.static_points,
-        args.csv, args.runs_csv)
+        args.csv, args.runs_csv, calibration=calibration)
 
 
 if __name__ == "__main__":

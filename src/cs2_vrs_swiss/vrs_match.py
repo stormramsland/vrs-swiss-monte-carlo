@@ -152,6 +152,37 @@ def expected_win_probability(rating_a: float, rating_b: float, rd_b: float = VRS
 
 
 # --------------------------------------------------------------------------------------
+# Calibration
+# --------------------------------------------------------------------------------------
+# Valve's evaluation of the model (expected vs observed win rate, in the readme of
+# counter-strike_regional_standings) found a slope of 0.7986: the model is overconfident,
+# favourites win less often than it predicts. Shrinking each probability towards 50% by
+# that slope corrects for it while keeping P(A beats B) + P(B beats A) = 1.
+CALIBRATION_SLOPE = 0.8
+
+# The same check split by series format (HLTV 1-star matches, 2024-2026,
+# https://github.com/stormramsland/vrs-win-rate-analysis) finds the model more overconfident
+# than Valve's single slope suggests, most of all in best-of-one:
+#   BO1 0.4717, BO3 0.6089  (BO5 0.86 from only 78 matches, too few to use).
+# The Swiss simulation uses these per format by default.
+CALIBRATION_BO1 = 0.47
+CALIBRATION_BO3 = 0.61
+
+
+def calibrate(p: float, slope: float = CALIBRATION_SLOPE) -> float:
+    """50% + slope * (p - 50%). slope 1 = no change, 0 = every match a coin flip."""
+    if not 0 <= slope <= 1:
+        raise ValueError(f"calibration slope must be between 0 and 1, got {slope}")
+    return 0.5 + slope * (p - 0.5)
+
+
+def calibrated_win_probability(rating_a: float, rating_b: float,
+                               slope: float = CALIBRATION_SLOPE) -> float:
+    """Chance that A beats B, corrected for the model's overconfidence."""
+    return calibrate(expected_win_probability(rating_a, rating_b), slope)
+
+
+# --------------------------------------------------------------------------------------
 # Main entry point
 # --------------------------------------------------------------------------------------
 def update_ratings(winner_rating: float, loser_rating: float,

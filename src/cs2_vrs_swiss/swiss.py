@@ -11,6 +11,16 @@
 
 Results can be entered by hand (SwissStage.record_result) or simulated with VRS
 win probabilities, updating ratings after every match (vrs_match.update_ratings).
+Simulated win probabilities are calibrated (see vrs_match.calibrate): the raw VRS
+model is overconfident, so each chance is shrunk towards 50%, by a slope that depends on
+the series format:
+  BO1 0.47, BO3 0.61 (defaults, from HLTV 1-star matches 2024-2026; 1 = raw model).
+Which matches are best-of-three (--bo3):
+  deciders  matches where a team can advance or be eliminated (2-0, 2-1, 2-2, 1-2, 0-2),
+            the rest BO1, as in Major Stage 1 and 2 (default)
+  all       every match BO3
+  none      every match BO1
+Every match is still one random draw; a BO3 match just uses the BO3 slope for the series.
 
 Command line (simulates the whole stage):
     python -m cs2_vrs_swiss.swiss data/vrs_points.csv
@@ -26,10 +36,50 @@ import csv
 import random
 from dataclasses import dataclass, field
 
-from .vrs_match import expected_win_probability, update_ratings
+from .vrs_match import (CALIBRATION_BO1, CALIBRATION_BO3, calibrate, calibrated_win_probability,
+                        update_ratings)
 
 WINS_TO_ADVANCE = 3
 LOSSES_TO_ELIMINATE = 3
+BO3_RULES = ("deciders", "all", "none")
+
+
+@dataclass(frozen=True)
+class Calibration:
+    """Calibration slope per series format, and which Swiss matches are best-of-three."""
+    bo1: float = CALIBRATION_BO1
+    bo3: float = CALIBRATION_BO3
+    bo3_matches: str = "deciders"   # see BO3_RULES / the module docstring
+
+    def __post_init__(self) -> None:
+        for slope in (self.bo1, self.bo3):
+            calibrate(0.5, slope)   # raises ValueError unless 0 <= slope <= 1
+        if self.bo3_matches not in BO3_RULES:
+            raise ValueError(f"bo3_matches must be one of {', '.join(BO3_RULES)}, got {self.bo3_matches!r}")
+
+    @classmethod
+    def single(cls, slope: float) -> "Calibration":
+        """The same slope for every match (1 = raw VRS model)."""
+        return cls(slope, slope)
+
+    def best_of(self, wins: int, losses: int) -> int:
+        """Series length for a match between two teams on this record."""
+        if self.bo3_matches == "all":
+            return 3
+        if self.bo3_matches == "none":
+            return 1
+        decider = wins == WINS_TO_ADVANCE - 1 or losses == LOSSES_TO_ELIMINATE - 1
+        return 3 if decider else 1
+
+    def slope(self, best_of: int) -> float:
+        return self.bo3 if best_of == 3 else self.bo1
+
+    def describe(self) -> str:
+        if self.bo1 == self.bo3:
+            return "raw VRS model" if self.bo1 == 1 else f"calibration {self.bo1:g} for every match"
+        rule = {"deciders": "BO3 = advancement/elimination matches", "all": "every match BO3",
+                "none": "every match BO1"}[self.bo3_matches]
+        return f"calibration BO1 {self.bo1:g}, BO3 {self.bo3:g} ({rule})"
 
 
 @dataclass
@@ -56,16 +106,24 @@ class Match:
     team1: str
     team2: str
     winner: str | None = None
+    best_of: int = 1
 
 
 class SwissStage:
     def __init__(self, teams: dict[str, float], rng: random.Random | None = None,
-                 update_points: bool = True):
+                 update_points: bool = True, calibration: Calibration | float | None = None):
         self.teams = {name: Team(name, pts) for name, pts in teams.items()}
         self.rng = rng or random.Random()
         # True: VRS points change after every match (later win chances use them).
         # False: every match uses the points the teams started the stage with.
         self.update_points = update_points
+        # Slopes used to shrink win probabilities towards 50%, per series format.
+        # A plain number means the same slope for every match (1 = raw VRS model).
+        if calibration is None:
+            calibration = Calibration()
+        elif not isinstance(calibration, Calibration):
+            calibration = Calibration.single(calibration)
+        self.calibration = calibration
         self.round = 0
         self.matches: list[Match] = []
 
@@ -77,7 +135,7 @@ class SwissStage:
         if sorted(used) != sorted(self.teams) :
             raise ValueError("round 1 must use every team exactly once")
         self.round = 1
-        new = [Match(1, "0-0", a, b) for a, b in pairs]
+        new = [Match(1, "0-0", a, b, best_of=self.calibration.best_of(0, 0)) for a, b in pairs]
         self.matches += new
         return new
 
@@ -121,7 +179,8 @@ class SwissStage:
             pairs = self._draw(pool)
             if pairs is None:
                 raise ValueError(f"no valid draw without rematches at {w}-{l}")
-            new += [Match(self.round, f"{w}-{l}", a.name, b.name) for a, b in pairs]
+            best_of = self.calibration.best_of(w, l)
+            new += [Match(self.round, f"{w}-{l}", a.name, b.name, best_of=best_of) for a, b in pairs]
         self.matches += new
         return new
 
@@ -140,8 +199,11 @@ class SwissStage:
             w.points, l.points = update_ratings(w.points, l.points)
 
     def simulate_result(self, match: Match) -> float:
-        """Pick a winner using VRS expected win probability; returns team1's win chance."""
-        p1 = expected_win_probability(self.teams[match.team1].points, self.teams[match.team2].points)
+        """Pick a winner using the calibrated VRS win probability; returns team1's win chance.
+        The calibration slope depends on the match format (match.best_of)."""
+        p1 = calibrated_win_probability(self.teams[match.team1].points,
+                                        self.teams[match.team2].points,
+                                        self.calibration.slope(match.best_of))
         self.record_result(match, match.team1 if self.rng.random() < p1 else match.team2)
         return p1
 
@@ -160,6 +222,31 @@ class SwissStage:
 
 
 # ---- CLI ---------------------------------------------------------------------------
+def add_calibration_args(p: argparse.ArgumentParser) -> None:
+    """The calibration options shared by every command."""
+    p.add_argument("--calibration-bo1", type=float, default=CALIBRATION_BO1,
+                   help=f"Shrink BO1 win chances towards 50%% (default {CALIBRATION_BO1}; 1 = raw VRS model)")
+    p.add_argument("--calibration-bo3", type=float, default=CALIBRATION_BO3,
+                   help=f"Shrink BO3 win chances towards 50%% (default {CALIBRATION_BO3}; 1 = raw VRS model)")
+    p.add_argument("--calibration", type=float, default=None,
+                   help="One slope for every match, overriding the two above "
+                        "(e.g. 0.8 = Valve's evaluation, 1 = raw VRS model)")
+    p.add_argument("--bo3", choices=BO3_RULES, default="deciders",
+                   help="Which matches are best-of-three: deciders = advancement and elimination "
+                        "matches, the rest BO1 (default, as in Major Stage 1 and 2); all; none")
+
+
+def calibration_from_args(p: argparse.ArgumentParser, args: argparse.Namespace) -> Calibration:
+    if args.calibration is not None:
+        bo1 = bo3 = args.calibration
+    else:
+        bo1, bo3 = args.calibration_bo1, args.calibration_bo3
+    try:
+        return Calibration(bo1, bo3, args.bo3)
+    except ValueError as e:
+        p.error(str(e))
+
+
 def load_points(path: str) -> dict[str, float]:
     with open(path, newline="") as f:
         return {row["team"]: float(row["points"]) for row in csv.DictReader(f)}
@@ -175,14 +262,14 @@ def load_pairs(path: str) -> list[tuple[str, str]]:
 
 # Fixed round-1 matchups. These do NOT change if VRS points change.
 ROUND1 = [
-    ("PVISION", "DENDELE CS"),
-    ("Team Liquid", "9z Team"),
-    ("100 Thieves", "Imperial Esports"),
-    ("HEROIC", "Wildcard"),
-    ("Ninjas in Pyjamas", "FlyQuest"),
-    ("FaZe Clan", "BC.Game"),
-    ("Eternal Fire", "Chinggis Warriors"),
-    ("M80", "Lynn Vision Gaming"),
+    ("FUT Esports", "FlyQuest"),
+    ("The MongolZ", "Lynn Vision Gaming"),
+    ("Astralis", "Imperial Esports"),
+    ("Nemiga Gaming", "Ninjas in Pyjamas"),
+    ("G2 Esports", "Team Liquid"),
+    ("1win", "Eternal Fire"),
+    ("Natus Vincere", "PVISION"),
+    ("MIBR", "100 Thieves"),
 ]
 
 
@@ -191,20 +278,22 @@ def main() -> None:
     p.add_argument("points_csv")
     p.add_argument("--round1", help="CSV of round-1 pairings (team1,team2)")
     p.add_argument("--seed", type=int, default=None, help="Random seed for draws/results")
+    add_calibration_args(p)
     args = p.parse_args()
 
     points = load_points(args.points_csv)
-    stage = SwissStage(points, random.Random(args.seed))
+    stage = SwissStage(points, random.Random(args.seed), calibration=calibration_from_args(p, args))
     stage.set_round1(load_pairs(args.round1) if args.round1 else ROUND1)
+    print(f"Win chances: {stage.calibration.describe()}")
 
     while True:
         current = [m for m in stage.matches if m.round == stage.round]
         print(f"\n### Round {stage.round}\n")
-        print("| Group | Match | Win % (team 1) | Winner |")
-        print("|---|---|---|---|")
+        print("| Group | Format | Match | Win % (team 1) | Winner |")
+        print("|---|---|---|---|---|")
         for m in current:
             p1 = stage.simulate_result(m)
-            print(f"| {m.group} | {m.team1} vs {m.team2} | {p1 * 100:.0f}% | {m.winner} |")
+            print(f"| {m.group} | BO{m.best_of} | {m.team1} vs {m.team2} | {p1 * 100:.0f}% | {m.winner} |")
         if not stage.pair_next_round():
             break
 
